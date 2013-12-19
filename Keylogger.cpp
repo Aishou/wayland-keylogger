@@ -72,6 +72,7 @@ struct Hook {
 };
 Hook hook_table[] = {
 	{"wl_proxy_create", (void*) &g_real_wl_proxy_create},
+	{"wl_proxy_add_listener", (void*) &g_real_wl_proxy_add_listener},
 };
 
 struct KeyLoggerData {
