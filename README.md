@@ -1,7 +1,24 @@
 wayland-keylogger
 =================
 
-This is a proof-of-concept Wayland keylogger that I wrote to demonstrate the fundamental insecurity of a typical Linux desktop that lacks both sandboxing (chroot, cgroups, ...) and mandatory access control (SELinux). The keylogger requires nothing but user-level access to be installed. Installation is very simple: just put the library somewhere in your home folder and LD_PRELOAD it from ~/.profile (or maybe ~/.bashrc), like this:
+### Summary
+
+**TL;DR** - This is a `LD_PRELOAD` attack that intercepts the Wayland protocol.
+
+Requirements:
+
+- Inject an environment variable to each attacked program.
+- Presence of shared library somewhere on the system.
+
+Achieves:
+
+- Full visibility into program-to-compositor communication.
+
+### Writeup
+
+This is a proof-of-concept Wayland keylogger that I wrote to demonstrate the fundamental insecurity of a typical Linux desktop that lacks both sandboxing (chroot, cgroups, ...) and mandatory access control (SELinux). The keylogger requires nothing but user-level access to be installed, just like any other LD_PRELOAD attack.
+
+Adding persistence to the attack is very simple: just add it from ~/.profile (or maybe ~/.bashrc), like this:
 
     export LD_PRELOAD=/home/user/path/to/libwayland-keylogger.so
 
